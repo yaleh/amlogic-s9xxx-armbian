@@ -41,6 +41,8 @@ auto_mainline_uboot="no"
 use_ampart="yes"
 # Show all device list by default (-l)
 show_all_list="no"
+# BTRFS ZSTD compression level (-b)
+btrfs_zstd_level=1
 #
 # Set install list profile
 model_conf="/etc/model_database.conf"
@@ -69,7 +71,7 @@ init_var() {
     echo -e "${STEPS} Start initializing the environment..."
 
     # If it is followed by [ : ], it means that the option requires a parameter value
-    get_all_ver="$(getopt "m:a:s:" "${@}")"
+    get_all_ver="$(getopt "m:a:s:b:" "${@}")"
 
     while [[ -n "${1}" ]]; do
         case "${1}" in
@@ -97,6 +99,14 @@ init_var() {
                 error_msg "Invalid -s parameter [ ${2} ]!"
             fi
             ;;
+        -b | --BTRFS_ZSTD)
+            if [[ -n "${2}" ]]; then
+                btrfs_zstd_level="${2}"
+                shift
+            else
+                error_msg "Invalid -b parameter [ ${2} ]!"
+            fi
+            ;;
         *)
             error_msg "Invalid option [ ${1} ]!"
             ;;
@@ -108,6 +118,7 @@ init_var() {
     echo -e "${INFO} Use mainline u-boot: [ ${auto_mainline_uboot} ]"
     echo -e "${INFO} Using the Ampart tool: [ ${use_ampart} ]"
     echo -e "${INFO} Show all lists: [ ${show_all_list} ]"
+    echo -e "${INFO} BTRFS ZSTD compression level: [ ${btrfs_zstd_level} ]"
 
     # Find a list of devices of the same family
     SEARCH_FAMILY=""
@@ -241,8 +252,8 @@ EOF
     read filetype
     if [[ "${filetype}" -eq "2" || "${filetype}" == "btrfs" ]]; then
         file_system_type="btrfs"
-        uenv_mount_string="UUID=${ROOTFS_UUID} rootflags=compress=zstd:6 rootfstype=btrfs"
-        fstab_mount_string="defaults,noatime,compress=zstd:6"
+        uenv_mount_string="UUID=${ROOTFS_UUID} rootflags=compress=zstd:${btrfs_zstd_level} rootfstype=btrfs"
+        fstab_mount_string="defaults,noatime,compress=zstd:${btrfs_zstd_level}"
     else
         file_system_type="ext4"
         uenv_mount_string="UUID=${ROOTFS_UUID} rootflags=data=writeback rw rootfstype=ext4"
@@ -464,9 +475,9 @@ copy_rootfs() {
 
     echo -e "${INFO} Formatting ROOTFS partition."
     if [[ "${file_system_type}" == "btrfs" ]]; then
-        mkfs.btrfs -f -U ${ROOTFS_UUID} -L "ROOTFS_EMMC" -m single ${PART_ROOT}
+        mkfs.btrfs -f -U ${ROOTFS_UUID} -L "ROOTFS_EMMC" -m single --mixed ${PART_ROOT}
         sleep 3
-        mount -t btrfs -o compress=zstd:6 ${PART_ROOT} ${DIR_INSTALL}
+        mount -t btrfs -o compress=zstd:${btrfs_zstd_level} ${PART_ROOT} ${DIR_INSTALL}
     else
         mkfs.ext4 -F -q -U ${ROOTFS_UUID} -L "ROOTFS_EMMC" -b 4k -m 0 ${PART_ROOT}
         sleep 3
